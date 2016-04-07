@@ -1,0 +1,185 @@
+
+# A 3-node example for ad-hoc simulation with AODV
+
+#Define options
+set val(chan)		Channel/WirelessChannel		;# channel type
+set val(prop)		Propagation/TwoRayGround	;# radio-propagation-model 
+set val(netif)		Phy/WirelessPhy			;# network interface type
+
+set val(mac)		Mac/802_11			;# Mac type
+set val(ifq) 		Queue/DropTail/PriQueue		;# interface queue type
+set val(ll)		LL				;# link layer type
+set val(ant) 		Antenna/OmniAntenna		;# antenna model
+set val(ifqlen)		50				;# max packet in ifq
+set val(nn)		5				;# number of mobilenodes
+set val(rp)		AODV				;# routing protocol
+set val(x)		800				;# x dimension of topology
+set val(y)		700				;# y dimension of topology
+set val(stop)		300				;# time of simulation end
+
+set ns [new Simulator]
+
+set tracefd [open simple.tr w]
+set WindowVsTime2 [open win.tr w]
+set namtrace [open simwrls.nam w]
+
+set f0 [open out02.tr w]	         
+set f1 [open out03.tr w]
+set f2 [open out04.tr w]
+
+$ns trace-all $tracefd
+$ns color 1 blue
+
+$ns namtrace-all-wireless $namtrace $val(x) $val(y)
+
+#set up topology object
+set topo [new Topography]
+
+$topo load_flatgrid $val(x) $val(y)
+
+create-god $val(nn)
+
+#
+#Create nn mobilenodes [$val(nn)] and attach them to the channel
+#
+
+# configure node
+
+        $ns node-config -adhocRouting $val(rp) \
+			 -llType $val(ll) \
+			 -macType $val(mac) \
+			 -ifqType $val(ifq) \
+			 -ifqLen $val(ifqlen) \
+			 -antType $val(ant) \
+			 -propType $val(prop) \
+			 -phyType $val(netif) \
+			 -channelType $val(chan) \
+			 -topoInstance $topo \
+			 -agentTrace ON \
+			 -routerTrace ON \
+			 -macTrace OFF \
+			 -movementTrace ON			
+			 
+	for {set i 0} {$i < $val(nn) } {incr i} {
+		set node_($i) [$ns node]	
+		#$node_($i) random-motion 0		;# disable random motion
+	}
+
+#Provide initial location of mobilenodes
+$node_(0) set X_ 1.0
+$node_(0) set Y_ 20.0
+$node_(0) set Z_ 0.0
+
+
+$node_(1) set X_ 1.0
+$node_(1) set Y_ 170.0
+$node_(1) set Z_ 0.0
+
+$node_(2) set X_ 160.0
+$node_(2) set Y_ 20.0
+$node_(2) set Z_ 0.0
+
+$node_(3) set X_ 320.0
+$node_(3) set Y_ 20.0
+$node_(3) set Z_ 0.0
+
+$node_(4) set X_ 480.0
+$node_(4) set Y_ 170.0
+$node_(4) set Z_ 0.0
+
+# Generation of movement
+
+$ns at 25.0 "$node_(1) setdest 321.0 170.0 3.0"
+$ns at 26.0 "$node_(2) setdest 161.0 21.0 3.0"
+$ns at 27.0 "$node_(3) setdest 321.0 170.0 3.0"
+$ns at 100.0 "$node_(4) setdest 480.0 21.0 3.0"
+$ns at 150.0 "$node_(1) setdest 640.0 170.0 3.0"
+$ns at 190.0 "$node_(1) setdest 640.0 21.0 3.0"
+$ns at 230.0 "$node_(0) setdest 20.0 170.0 3.0"
+
+# Set a TCP connection between node_(0) and node_(1)
+set tcp [new Agent/TCP/Newreno]
+$tcp set class_ 2
+
+set sink [new Agent/TCPSink]
+$ns attach-agent $node_(0) $tcp
+$ns attach-agent $node_(1) $sink
+$ns connect $tcp $sink
+
+set ftp [new Application/FTP]
+$ftp attach-agent $tcp
+$tcp set fid_ 1
+$ns at 10.0 "$ftp start"
+
+# Initialize Flags
+
+set holdtiome 0
+set holdseq 0
+set holdrate1 0
+
+# Printing the window size
+##################################################
+## Obtain CWND from TCP agent
+##################################################
+
+proc plotWindow {tcpSource outfile} {
+   global ns
+
+   set now [$ns now]
+   set cwnd [$tcpSource set cwnd_]
+
+   ###Print TIME CWND   for  gnuplot to plot progressing on CWND   
+   puts  $outfile  "$now $cwnd"
+   set time 0.01
+   $ns at [expr $now+$time] "plotWindow $tcpSource  $outfile"
+}
+
+$ns at 10.1 "plotWindow $tcp $WindowVsTime2"
+
+# Define node initial position in nam
+for {set i 0} {$i < $val(nn) } { incr i } {
+# 30 defines the node size for nam
+$ns initial_node_pos $node_($i) 30
+}
+
+# Telling nodes when the simulation ends
+for {set i 0} { $i < $val(nn) } { incr i } {
+    $ns at $val(stop) "$node_($i) reset"
+}
+
+proc record {} { global sink f0 f1 f2 holdtime holdseq holdrate1
+set ns_ [Simulator instance]
+set time 0.9 ;# Set Sampling Time to 0.9 Sec
+set bw0 [$sink set bytes_]
+set now [$ns_ now]
+
+# Record bit rate in Trace Files
+
+puts $f0 "$now "
+puts $f1 "[expr (($bw0+$holdrate1)*8)/(2*$time*1000000)]"
+puts $f2 "$bw0		$holdrate1	$bw0/$time*8/1000000		"
+
+# Reset Variables
+
+$sink set bytes_ 0
+set holdrate1 $bw0
+$ns_ at [expr $now+$time] "record"	;# Schedule Record after $time interval sec
+
+}
+
+$ns at 0.0 "record"
+
+# Ending nam and the Simulation
+$ns at $val(stop) "$ns nam-end-wireless $val(stop)"
+$ns at $val(stop) "stop"
+$ns at 300.01 "puts \"end simulation\" ; $ns halt"
+
+proc stop {} {
+global ns tracefd namtrace
+$ns flush-trace
+close $tracefd
+close $namtrace
+}
+
+$ns run
+

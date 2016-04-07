@@ -1,0 +1,197 @@
+# To generate mobility
+# setdest -n 5 -p 2.0 -M 10.0 -t 300 -x 800 -y 700 > mobility
+
+
+
+# A 3-node example for ad-hoc simulation with AODV
+
+#Define options
+set val(chan)		Channel/WirelessChannel		;# channel type
+set val(prop)		Propagation/TwoRayGround	;# radio-propagation-model 
+set val(netif)		Phy/WirelessPhy			;# network interface type
+
+set val(mac)		Mac/802_11			;# Mac type
+set val(ifq) 		Queue/DropTail/PriQueue		;# interface queue type
+set val(ll)		LL				;# link layer type
+set val(ant) 		Antenna/OmniAntenna		;# antenna model
+set val(ifqlen)		50				;# max packet in ifq
+set val(nn)		5				;# number of mobilenodes
+set val(rp)		AODV				;# routing protocol
+set val(x)		800				;# x dimension of topology
+set val(y)		700				;# y dimension of topology
+set val(stop)		300				;# time of simulation end
+
+set ns [new Simulator]
+
+set tracefd [open simple.tr w]
+set WindowVsTime2 [open win.tr w]
+set namtrace [open simwrls.nam w]
+
+set f0 [open out02.tr w]	         
+set f1 [open out03.tr w]
+set f2 [open out04.tr w]
+
+#$ns use-newtrace
+$ns trace-all $tracefd
+$ns color 1 blue
+
+$ns namtrace-all-wireless $namtrace $val(x) $val(y)
+
+#set up topology object
+set topo [new Topography]
+
+$topo load_flatgrid $val(x) $val(y)
+
+create-god $val(nn)
+
+#
+#Create nn mobilenodes [$val(nn)] and attach them to the channel
+#
+
+# configure node
+
+        $ns node-config -adhocRouting $val(rp) \
+			 -llType $val(ll) \
+			 -macType $val(mac) \
+			 -ifqType $val(ifq) \
+			 -ifqLen $val(ifqlen) \
+			 -antType $val(ant) \
+			 -propType $val(prop) \
+			 -phyType $val(netif) \
+			 -channelType $val(chan) \
+			 -topoInstance $topo \
+			 -agentTrace ON \
+			 -routerTrace ON \
+			 -macTrace OFF \
+			 -movementTrace ON			
+			 
+	for {set i 0} {$i < $val(nn) } {incr i} {
+		set node_($i) [$ns node]	
+		$node_($i) random-motion 0		;# disable random motion
+	}
+
+#
+# nodes: 5, pause: 2.00, max speed: 0.00, max x: 800.00, max y: 500.00
+#
+$node_(0) set X_ 791.907040010361
+$node_(0) set Y_ 650.520715072823
+$node_(0) set Z_ 0.000000000000
+$node_(1) set X_ 137.677872515516
+$node_(1) set Y_ 356.619446300167
+$node_(1) set Z_ 0.000000000000
+$node_(2) set X_ 758.610318086796
+$node_(2) set Y_ 629.926421825005
+$node_(2) set Z_ 0.000000000000
+$node_(3) set X_ 220.854683857824
+$node_(3) set Y_ 395.402547401313
+$node_(3) set Z_ 0.000000000000
+$node_(4) set X_ 513.820222130652
+$node_(4) set Y_ 99.238388319869
+$node_(4) set Z_ 0.000000000000
+
+
+$ns at 2.000000000000 "$node_(0) setdest 46.263041538818 541.275024643448 2.082350382844"
+$ns at 2.000000000000 "$node_(1) setdest 567.711485289966 182.610179456630 4.244975918661"
+$ns at 2.000000000000 "$node_(2) setdest 81.679767786849 580.886709625934 5.146650909563"
+$ns at 2.000000000000 "$node_(3) setdest 359.650056531469 98.880208858075 1.492892620275"
+$ns at 2.000000000000 "$node_(4) setdest 382.205252418921 470.862356535944 0.508191458812"
+$ns at 111.283377580307 "$node_(1) setdest 567.711485289966 182.610179456630 0.000000000000"
+$ns at 113.283377580307 "$node_(1) setdest 474.577216317891 268.003840335831 1.445565270418"
+$ns at 133.873049056177 "$node_(2) setdest 81.679767786849 580.886709625934 0.000000000000"
+$ns at 135.873049056177 "$node_(2) setdest 681.304163697936 256.931976750924 7.891462082375"
+$ns at 200.693413805754 "$node_(1) setdest 474.577216317891 268.003840335831 0.000000000000"
+$ns at 202.693413805754 "$node_(1) setdest 46.546937916838 43.212725102959 5.194637628851"
+$ns at 221.304660325514 "$node_(3) setdest 359.650056531469 98.880208858075 0.000000000000"
+$ns at 222.237209368202 "$node_(2) setdest 681.304163697936 256.931976750924 0.000000000000"
+$ns at 223.304660325514 "$node_(3) setdest 336.471458241824 419.614462503187 1.937640251831"
+$ns at 224.237209368202 "$node_(2) setdest 108.126614636354 517.293019335938 3.839356787174"
+$ns at 295.763937782507 "$node_(1) setdest 46.546937916838 43.212725102959 0.000000000000"
+$ns at 297.763937782507 "$node_(1) setdest 503.324991811905 241.986558920053 1.390134789783"
+
+
+# Set a TCP connection between node_(0) and node_(1)
+set tcp [new Agent/TCP/Newreno]
+$tcp set class_ 2
+
+set sink [new Agent/TCPSink]
+$ns attach-agent $node_(0) $tcp
+$ns attach-agent $node_(1) $sink
+$ns connect $tcp $sink
+
+set ftp [new Application/FTP]
+$ftp attach-agent $tcp
+$tcp set fid_ 1
+$ns at 10.0 "$ftp start"
+
+# Initialize Flags
+
+set holdtiome 0
+set holdseq 0
+set holdrate1 0
+
+# Printing the window size
+##################################################
+## Obtain CWND from TCP agent
+##################################################
+
+proc plotWindow {tcpSource outfile} {
+   global ns
+
+   set now [$ns now]
+   set cwnd [$tcpSource set cwnd_]
+
+   ###Print TIME CWND   for  gnuplot to plot progressing on CWND   
+   puts  $outfile  "$now $cwnd"
+   set time 0.01
+   $ns at [expr $now+$time] "plotWindow $tcpSource  $outfile"
+}
+
+$ns at 10.1 "plotWindow $tcp $WindowVsTime2"
+
+# Define node initial position in nam
+for {set i 0} {$i < $val(nn) } { incr i } {
+# 30 defines the node size for nam
+$ns initial_node_pos $node_($i) 30
+}
+
+# Telling nodes when the simulation ends
+for {set i 0} { $i < $val(nn) } { incr i } {
+    $ns at $val(stop) "$node_($i) reset"
+}
+
+proc record {} { global sink f0 f1 f2 holdtime holdseq holdrate1
+set ns_ [Simulator instance]
+set time 0.9 ;# Set Sampling Time to 0.9 Sec
+set bw0 [$sink set bytes_]
+set now [$ns_ now]
+
+# Record bit rate in Trace Files
+
+puts $f0 "$now "
+puts $f1 "[expr (($bw0+$holdrate1)*8)/(2*$time*1000000)]"
+puts $f2 "$bw0		$holdrate1	$bw0/$time*8/1000000		"
+
+# Reset Variables
+
+$sink set bytes_ 0
+set holdrate1 $bw0
+$ns_ at [expr $now+$time] "record"	;# Schedule Record after $time interval sec
+
+}
+
+$ns at 0.0 "record"
+
+# Ending nam and the Simulation
+$ns at $val(stop) "$ns nam-end-wireless $val(stop)"
+$ns at $val(stop) "stop"
+$ns at 300.01 "puts \"end simulation\" ; $ns halt"
+
+proc stop {} {
+global ns tracefd namtrace
+$ns flush-trace
+close $tracefd
+close $namtrace
+}
+
+$ns run
+
